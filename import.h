@@ -7,12 +7,14 @@
 
 enum
 {
-    UC_EVENT_BY_TIMER = 1,
+    UC_ACTIVATE_BY_TIMER  = 1,
+    UC_ACTIVATE_BY_PROBE  = 2,
+    UC_ACTIVATE_BY_SIGNAL = 3,
 };
 
 enum
 {
-    UC_EVENT_ANYID = 0,
+    UC_EVENT_NOID = 0,
 };
 
 typedef struct UcEvent UcEvent;
@@ -23,15 +25,15 @@ typedef bool (*UcEventProbe)(UcEvent *ev);
 union uc_waitfor$EventTrig
 {
     UcEventProbe    probe;
-    uint32_t        delay;
+    uint32_t        onTick;
 };
 
 struct uc_waitfor$EventOpt
 {
-   uint8_t id;
-   uint8_t repeat: 1;
-   uint8_t signalled: 1;
-   uint8_t kind: 3;
+   uint32_t repeat: 1;
+   uint32_t signalled: 1;
+   uint32_t kind: 2;
+   uint32_t delay: 28;
 };
 
 struct UcEvent
@@ -55,25 +57,4 @@ void ucDel_Event(UcEventSet *evset, UcEvent* evt);
 void ucSignal_Event(UcEventSet *evset, UcEvent* evt);
 UcEvent *ucWaitFor_Event(UcEventSet *evset);
 
-__Forceinline
-union uc_waitfor$EventTrig uc_waitfor$probeEventTrig(UcEventProbe probe)
-{
-    union uc_waitfor$EventTrig o = {.probe = probe};
-    return o;
-}
-
-__Forceinline
-union uc_waitfor$EventTrig uc_waitfor$timeEventTrig(uint32_t delayMs)
-{
-    union uc_waitfor$EventTrig o = {.delay = delayMs};
-    return o;
-}
-
-__Forceinline
-struct uc_waitfor$EventOpt uc_waitfor$rtcEventOpt(uint8_t id, bool repeat)
-{
-    struct uc_waitfor$EventOpt o = {.id = id, .kind = UC_EVENT_BY_TIMER, .repeat = repeat?1:0};
-    return o;
-}
-
-#define UC_RTC_REPEAT_EVENT(Id,Delay) { NULL, NULL, uc_waitfor$timeEventTrig(Delay), uc_waitfor$rtcEventOpt(Id,true) }
+#define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=0}, {.kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .signalled = 0, .delay = (Delay)} }
