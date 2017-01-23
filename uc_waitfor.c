@@ -1,38 +1,49 @@
 
 #include <~sudachen/uc_waitfor/import.h>
 
-static const uint32_t TICK_GAP = 10;
-typedef uint32_t uc_waitfor$tick_t;
-static uc_waitfor$tick_t uc_waitfor$tick = 0;
+static uint32_t tick = 0;
+const UcEvent uc_waitfor$Nil = {NULL,NULL,};
 
-void uc_waitfor$IrqHandler(UcIrqHandler* self)
+#define isNIL(Ev) (Ev == UC_EVENT_LIST_NIL)
+#define NIL UC_EVENT_LIST_NIL
+
+static void timedIrqHandler(UcIrqHandler* self)
 {
     (void)self;
-    ++uc_waitfor$tick;
+    ++tick;
 }
 
-void uc_waitfor$enable(bool enable)
+void enableHandleTimedIqr(bool enable)
 {
-    static UcIrqHandler irq = { uc_waitfor$IrqHandler, NULL };
+    static UcIrqHandler h = { timedIrqHandler, NULL };
 
     if ( enable )
     {
-        if ( irq.next == NULL )
-            ucRegister_IrqHandler(&irq,&UC_TIMED_IRQ);
+        if ( h.next == NULL )
+            ucRegister_1msHandler(&h);
     }
     else
     {
-        if ( irq.next != NULL )
-            ucUnregister_IrqHandler(&irq,&UC_TIMED_IRQ);
+        if ( h.next != NULL )
+        {
+            ucUnregister_1msHandler(&h);
+            tick = 0;
+        }
     }
 }
 
-void uc_waitfor$reload(UcEventSet *evset,UcEvent* ev)
+static void reload(UcEventSet *evset,UcEvent* ev)
 {
+    UcEvent **evPtr = &evset->timedEvents;
     __Assert( ev->o.kind == UC_ACTIVATE_BY_TIMER );
+    __Assert( ev->next == NULL );
 
-    ev->next = evset->timedEvents;
-    evset->timedEvents = ev;
+    ev->t.onTick = tick + ev->o.delay;
+
+    __Critical
+    {
+        C_SLIST_LINK_WHEN((_->t.onTick > ev->t.onTick),UcEvent,evset->timedEvents,ev,NIL);
+    }
 }
 
 void ucAdd_Event(UcEventSet *evset, UcEvent* ev)
@@ -40,86 +51,125 @@ void ucAdd_Event(UcEventSet *evset, UcEvent* ev)
     __Assert( ev->next == NULL );
     if ( ev->next != NULL ) return;
 
-    uc_waitfor$enable(true);
+    enableHandleTimedIqr(true);
 
     if ( ev->o.kind == UC_ACTIVATE_BY_TIMER )
     {
-        uc_waitfor$reload(evset,ev);
+        reload(evset,ev);
     }
     else
     {
-        ev->next = evset->otherEvents;
-        evset->otherEvents = ev;
+        __Critical
+        {
+            C_SLIST_LINK_FRONT(evset->otherEvents,ev,NIL);
+        }
     }
+}
+
+void ucDel_Event(UcEventSet *evset, UcEvent* ev)
+{
+    __Assert( ev->next != NULL );
+    if ( ev->next == NULL ) return;
+
+    __Critical
+    {
+        if ( ev->o.kind == UC_ACTIVATE_BY_TIMER )
+        {
+            C_SLIST_UNLINK(UcEvent,evset->timedEvents,ev,NIL);
+        }
+        else
+        {
+            C_SLIST_UNLINK(UcEvent,evset->otherEvents,ev,NIL);
+        }
+    }
+
+    __Assert(ev->next == NULL);
 }
 
 UcEvent *ucWaitFor_Event(UcEventSet *evset)
 {
     for(;;)
     {
-        uc_waitfor$tick_t onTick = uc_waitfor$tick;
+        uint32_t onTick = tick;
+        UcEvent *ev;
 
-        if ( evset->timedEvents )
+        for(;;)
         {
-            UcEvent **evPtr = &evset->timedEvents;
-            for(; *evPtr != NULL &&
-                (*evPtr)->t.onTick <= onTick &&
-                ((*evPtr)->t.onTick + TICK_GAP) > onTick; )
+            ev = NULL;
+
+            __Critical
             {
-                UcEvent *ev = *evPtr;
-                __Assert ( ev->o.kind == UC_ACTIVATE_BY_TIMER );
+                if ( !isNIL(evset->timedEvents) && evset->timedEvents->t.onTick <= onTick )
+                {
+                    ev = evset->timedEvents;
+                    evset->timedEvents = ev->next;
+                }
+            }
 
-                (*evPtr) = ev->next;
+            if ( !ev ) break;
 
-                if ( ev->o.repeat )
-                    uc_waitfor$reload(evset,ev);
+            __Assert ( ev->o.kind == UC_ACTIVATE_BY_TIMER );
+            ev->next = NULL; // is unlinked
+
+            if ( ev->o.repeat )
+                reload(evset,ev); // insert to wating list in appropriate possition
+                                  // new event with the same tick trigger will added the last
+            if ( ev->callback )
+            {
+                ev->callback(ev);
+                ev = NULL;
+            }
+            else // function should return event to caller
+                return ev;
+        }
+
+        // now, there is nothing before onTick moment
+       __Critical
+        {
+            if ( onTick > 0x7fffffff )
+            {
+                tick -= onTick;
+                for( ev = evset->timedEvents ; !isNIL(ev); ev = ev->next )
+                    ev->t.onTick -= onTick;
+            }
+
+            ev = evset->otherEvents;
+        }
+
+        while ( !isNIL(ev) )
+        {
+            bool triggered = false;
+            switch (ev->o.kind)
+            {
+            case UC_ACTIVATE_BY_PROBE:
+                __Assert ( ev->t.probe != NULL );
+                if ( ev->t.probe != NULL ) triggered = ev->t.probe(ev);
+                break;
+            case UC_ACTIVATE_BY_SIGNAL:
+                if (( triggered = ev->t.signalled ))
+                    ev->t.signalled = false;
+                break;
+            default:
+                __Unreachable();
+            }
+
+            if (triggered)
+            {
+                if ( !ev->o.repeat )
+                    ucDel_Event(evset,ev);
 
                 if ( ev->callback )
                     ev->callback(ev);
                 else
                     return ev;
             }
-        }
 
-        if ( evset->otherEvents )
-        {
-            UcEvent **evPtr = &evset->otherEvents;
-            while( *evPtr != NULL )
+            __Critical
             {
-                bool triggered = false;
-                UcEvent *ev = *evPtr;
-                switch (ev->o.kind)
-                {
-                case UC_ACTIVATE_BY_PROBE:
-                    __Assert ( ev->t.probe != NULL );
-                    if ( ev->t.probe != NULL ) triggered = ev->t.probe(ev);
-                    break;
-                case UC_ACTIVATE_BY_SIGNAL:
-                    triggered = ev->o.signalled != 0;
-                    ev->o.signalled = 0;
-                    break;
-                default:
-                    __Unreachable();
-                }
-
-                if (triggered)
-                {
-                    if ( !ev->o.repeat )
-                        (*evPtr) = ev->next;
-                    else
-                        evPtr = &ev->next;
-
-                    if ( ev->callback )
-                        ev->callback(ev);
-                    else
-                        return ev;
-                }
-                else
-                   evPtr = &ev->next;
+                ev = ev->next;
             }
         }
 
         __WFE();
     }
-    return NULL;
 }
