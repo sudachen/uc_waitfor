@@ -61,7 +61,7 @@ void ucAdd_Event(UcEventSet *evset, UcEvent* ev)
     {
         __Critical
         {
-            C_SLIST_LINK_FRONT(evset->otherEvents,ev,NIL);
+            C_SLIST_LINK_BACK(UcEvent,evset->otherEvents,ev,NIL);
         }
     }
 }
@@ -73,14 +73,8 @@ void ucDel_Event(UcEventSet *evset, UcEvent* ev)
 
     __Critical
     {
-        if ( ev->o.kind == UC_ACTIVATE_BY_TIMER )
-        {
-            C_SLIST_UNLINK(UcEvent,evset->timedEvents,ev,NIL);
-        }
-        else
-        {
-            C_SLIST_UNLINK(UcEvent,evset->otherEvents,ev,NIL);
-        }
+        UcEvent** const l = (ev->o.kind == UC_ACTIVATE_BY_TIMER)?&evset->timedEvents:&evset->otherEvents;
+        C_SLIST_UNLINK(UcEvent,(*l),ev,NIL);
     }
 
     __Assert(ev->next == NULL);
@@ -146,8 +140,8 @@ UcEvent *ucWaitFor_Event(UcEventSet *evset)
                 if ( ev->t.probe != NULL ) triggered = ev->t.probe(ev);
                 break;
             case UC_ACTIVATE_BY_SIGNAL:
-                if (( triggered = ev->t.signalled ))
-                    ev->t.signalled = false;
+                if (( triggered = ev->t.is.signalled ))
+                    ev->t.is.signalled = false;
                 break;
             default:
                 __Unreachable();

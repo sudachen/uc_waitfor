@@ -26,7 +26,11 @@ union uc_waitfor$EventTrig
 {
     UcEventProbe    probe;
     uint32_t        onTick;
-    bool            signalled;
+    struct
+    {
+        bool        signalled;
+        bool        completed;
+    } is;
 };
 
 struct uc_waitfor$EventOpt
