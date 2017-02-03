@@ -5,17 +5,22 @@
 
 #pragma uccm require(source) += [@inc]/~sudachen/uc_waitfor/uc_waitfor.c
 
-enum
-{
-    UC_ACTIVATE_BY_TIMER  = 1,
-    UC_ACTIVATE_BY_PROBE  = 2,
-    UC_ACTIVATE_BY_SIGNAL = 3,
-};
+#ifdef __nRF5x_UC__
+#pragma uccm require(source) += [@inc]/~sudachen/uc_waitfor/uc_nrf_timer.c
+#endif
 
 enum
 {
-    UC_EVENT_NOID = 0,
+    UC_ACTIVATE_BY_TIMER    = 0,
+    UC_ACTIVATE_BY_PROBE    = 1,
+    UC_ACTIVATE_BY_SIGNAL   = 2,
+    UC_CALLBACK_ON_COMPLETE = 3,
 };
+
+#define UC_EVENT_ID_NONE   0
+#define UC_EVENT_ID_FIRST  3
+
+#pragma uccm file(uccm_dynamic_defs.h) ~= #define UC_EVENT_ID_TIMER ({#UC_EVENT_ID:1} + UC_EVENT_ID_FIRST)\n
 
 typedef struct UcEvent UcEvent;
 typedef struct UcEventSet UcEventSet;
@@ -57,11 +62,17 @@ struct UcEventSet
 
 extern const UcEvent uc_waitfor$Nil;
 #define UC_EVENT_LIST_NIL ((UcEvent*)&uc_waitfor$Nil)
-#define UC_EMPTY_EVENT_SET { UC_EVENT_LIST_NIL, UC_EVENT_LIST_NIL }
 
-void ucAdd_Event(UcEventSet *evset, UcEvent* evt);
-void ucDel_Event(UcEventSet *evset, UcEvent* evt);
-void ucSignal_Event(UcEventSet *evset, UcEvent* evt);
-UcEvent *ucWaitFor_Event(UcEventSet *evset);
+void ucList_Event(struct UcEvent *);
+void ucUnlist_Event(struct UcEvent *);
+void ucSignal_Event(struct UcEvent *);
+void ucComplete_Event(struct UcEvent *);
+UcEvent * ucWaitFor_Event(void);
+
+__Forceinline
+bool ucIsUnlisted_Event(struct UcEvent *e)
+{
+    return e->next == NULL;
+}
 
 #define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=0}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }

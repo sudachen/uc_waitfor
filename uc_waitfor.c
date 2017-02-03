@@ -1,11 +1,12 @@
 
 #include <~sudachen/uc_waitfor/import.h>
 
-static uint32_t tick = 0;
-const UcEvent uc_waitfor$Nil = {NULL,NULL,};
-
 #define isNIL(Ev) (Ev == UC_EVENT_LIST_NIL)
 #define NIL UC_EVENT_LIST_NIL
+
+static uint32_t tick = 0;
+const UcEvent uc_waitfor$Nil = {NULL,NULL,};
+static UcEventSet uc_waitfor$evset = {NIL,NIL};
 
 static void timedIrqHandler(UcIrqHandler* self)
 {
@@ -34,7 +35,6 @@ void enableHandleTimedIqr(bool enable)
 
 static void reload(UcEventSet *evset,UcEvent* ev)
 {
-    UcEvent **evPtr = &evset->timedEvents;
     __Assert( ev->o.kind == UC_ACTIVATE_BY_TIMER );
     __Assert( ev->next == NULL );
 
@@ -46,8 +46,10 @@ static void reload(UcEventSet *evset,UcEvent* ev)
     }
 }
 
-void ucAdd_Event(UcEventSet *evset, UcEvent* ev)
+void ucList_Event(UcEvent *ev)
 {
+    UcEventSet *evset = &uc_waitfor$evset;
+
     __Assert( ev->next == NULL );
     if ( ev->next != NULL ) return;
 
@@ -66,9 +68,11 @@ void ucAdd_Event(UcEventSet *evset, UcEvent* ev)
     }
 }
 
-void ucDel_Event(UcEventSet *evset, UcEvent* ev)
+void ucUnlist_Event(UcEvent *ev)
 {
-    __Assert( ev->next != NULL );
+    UcEventSet *evset = &uc_waitfor$evset;
+
+    __Assert(ev->next != NULL);
     if ( ev->next == NULL ) return;
 
     __Critical
@@ -80,8 +84,24 @@ void ucDel_Event(UcEventSet *evset, UcEvent* ev)
     __Assert(ev->next == NULL);
 }
 
-UcEvent *ucWaitFor_Event(UcEventSet *evset)
+void ucComplete_Event(UcEvent *ev)
 {
+    __Assert( ev->o.kind == UC_ACTIVATE_BY_SIGNAL ||
+              ev->o.kind == UC_CALLBACK_ON_COMPLETE );
+
+    if ( ev->o.kind == UC_ACTIVATE_BY_SIGNAL )
+        ev->t.is.completed = true;
+    else if ( ev->o.kind == UC_CALLBACK_ON_COMPLETE )
+    {
+        ev->t.is.completed = true;
+        if ( ev->callback ) ev->callback(ev);
+    }
+}
+
+UcEvent *ucWaitFor_Event()
+{
+    UcEventSet *evset = &uc_waitfor$evset;
+
     for(;;)
     {
         uint32_t onTick = tick;
@@ -107,7 +127,7 @@ UcEvent *ucWaitFor_Event(UcEventSet *evset)
 
             if ( ev->o.repeat )
                 reload(evset,ev); // insert to wating list in appropriate possition
-                                  // new event with the same tick trigger will added the last
+            // new event with the same tick trigger will added the last
             if ( ev->callback )
             {
                 ev->callback(ev);
@@ -118,7 +138,7 @@ UcEvent *ucWaitFor_Event(UcEventSet *evset)
         }
 
         // now, there is nothing before onTick moment
-       __Critical
+        __Critical
         {
             if ( onTick > 0x7fffffff )
             {
@@ -135,24 +155,31 @@ UcEvent *ucWaitFor_Event(UcEventSet *evset)
             bool triggered = false;
             switch (ev->o.kind)
             {
-            case UC_ACTIVATE_BY_PROBE:
-                __Assert ( ev->t.probe != NULL );
-                if ( ev->t.probe != NULL ) triggered = ev->t.probe(ev);
-                break;
-            case UC_ACTIVATE_BY_SIGNAL:
-                if (( triggered = ev->t.is.signalled ))
-                    ev->t.is.signalled = false;
-                break;
-            default:
-                __Unreachable();
+                case UC_ACTIVATE_BY_PROBE:
+                    __Assert ( ev->t.probe != NULL );
+                    if ( ev->t.probe != NULL )
+                    {
+                        triggered = ev->t.probe(ev);
+                    }
+                    break;
+                case UC_ACTIVATE_BY_SIGNAL:
+                case UC_CALLBACK_ON_COMPLETE:
+                    if (( triggered = ev->t.is.signalled ))
+                    {
+                        ev->t.is.signalled = false;
+                        ev->t.is.completed = false;
+                    }
+                    break;
+                default:
+                    __Unreachable();
             }
 
             if (triggered)
             {
                 if ( !ev->o.repeat )
-                    ucDel_Event(evset,ev);
+                    ucUnlist_Event(ev);
 
-                if ( ev->callback )
+                if ( ev->callback && ev->o.kind != UC_CALLBACK_ON_COMPLETE )
                     ev->callback(ev);
                 else
                     return ev;
