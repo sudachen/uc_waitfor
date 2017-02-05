@@ -66,17 +66,23 @@ struct UcEventSet
 extern const UcEvent uc_waitfor$Nil;
 #define UC_EVENT_LIST_NIL ((UcEvent*)&uc_waitfor$Nil)
 
-void ucList_Event(struct UcEvent *);
-void ucUnlist_Event(struct UcEvent *);
-void ucUnlist_All_Events(uint32_t id);
-void ucSignal_Event(struct UcEvent *);
-void ucComplete_Event(struct UcEvent *);
-UcEvent * ucWaitFor_Event(void);
+void list_event(struct UcEvent *);
+void unlist_event(struct UcEvent *);
+void unlist_allEvents(uint32_t id);
+void signal_event(struct UcEvent *);
+void complete_event(struct UcEvent *);
+UcEvent * wait_forEvent(void);
 
 __Forceinline
-bool ucIsUnlisted_Event(struct UcEvent *e)
+bool is_unlistedEvent(struct UcEvent *e)
 {
     return e->next == NULL;
+}
+
+__Forceinline
+bool is_listedEvent(struct UcEvent *e)
+{
+    return e->next != NULL;
 }
 
 #define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }

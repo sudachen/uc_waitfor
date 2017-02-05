@@ -39,7 +39,6 @@ uint32_t app_timer_create(
     ne->callback = timeout_handler;
     ne->context = NULL;
 
-    __Assert(ne->e.o.id == UC_EVENT_ID_NRFTIMER);
     return NRF_SUCCESS;
 }
 
@@ -64,12 +63,12 @@ uint32_t app_timer_start(
         return NRF_ERROR_INVALID_PARAM;
     }
 
-    if (!ucIsUnlisted_Event(&ne->e)) ucUnlist_Event(&ne->e);
+    if (is_listedEvent(&ne->e)) unlist_event(&ne->e);
 
     __Assert(ne->e.o.id == UC_EVENT_ID_NRFTIMER);
     ne->context = p_context;
     ne->e.o.delay = ms;
-    ucList_Event(&ne->e);
+    list_event(&ne->e);
 
     return NRF_SUCCESS;
 }
@@ -77,13 +76,13 @@ uint32_t app_timer_start(
 uint32_t app_timer_stop(app_timer_id_t timer_id)
 {
     NrfTimerEvent *ne = (NrfTimerEvent*)timer_id; // yep, it's really is not const!
-    if ( !ucIsUnlisted_Event(&ne->e) )
-        ucUnlist_Event(&ne->e);
+    if (is_listedEvent(&ne->e))
+        unlist_event(&ne->e);
     return NRF_SUCCESS;
 }
 
 uint32_t app_timer_stop_all(void)
 {
-    ucUnlist_All_Events(UC_EVENT_ID_NRFTIMER);
+    unlist_allEvents(UC_EVENT_ID_NRFTIMER);
     return NRF_SUCCESS;
 }

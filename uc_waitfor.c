@@ -1,33 +1,33 @@
 
 #include <~sudachen/uc_waitfor/import.h>
 
-#define isNIL(Ev) (Ev == UC_EVENT_LIST_NIL)
+#define is_NIL(Ev) (Ev == UC_EVENT_LIST_NIL)
 #define NIL UC_EVENT_LIST_NIL
 
 static uint32_t tick = 0;
 const UcEvent uc_waitfor$Nil = {NULL,NULL,};
 static UcEventSet uc_waitfor$evset = {NIL,NIL};
 
-static void timedIrqHandler(UcIrqHandler* self)
+static void on_timedIrqHandler(UcIrqHandler* self)
 {
     (void)self;
     ++tick;
 }
 
-void enableHandleTimedIqr(bool enable)
+void enable_handleTimedIqr(bool enable)
 {
-    static UcIrqHandler h = { timedIrqHandler, NULL };
+    static UcIrqHandler h = { on_timedIrqHandler, NULL };
 
     if ( enable )
     {
         if ( h.next == NULL )
-            ucRegister_1msHandler(&h);
+            register_1msHandler(&h);
     }
     else
     {
         if ( h.next != NULL )
         {
-            ucUnregister_1msHandler(&h);
+            unregister_1msHandler(&h);
             tick = 0;
         }
     }
@@ -46,14 +46,14 @@ static void reload(UcEventSet *evset,UcEvent* ev)
     }
 }
 
-void ucList_Event(UcEvent *ev)
+void list_event(UcEvent *ev)
 {
     UcEventSet *evset = &uc_waitfor$evset;
 
     __Assert( ev->next == NULL );
     if ( ev->next != NULL ) return;
 
-    enableHandleTimedIqr(true);
+    enable_handleTimedIqr(true);
 
     if ( ev->o.kind == UC_ACTIVATE_BY_TIMER )
     {
@@ -70,7 +70,7 @@ void ucList_Event(UcEvent *ev)
     __Assert( ev->next != NULL );
 }
 
-void ucUnlist_Event(UcEvent *ev)
+void unlist_event(UcEvent *ev)
 {
     UcEventSet *evset = &uc_waitfor$evset;
 
@@ -86,7 +86,7 @@ void ucUnlist_Event(UcEvent *ev)
     __Assert(ev->next == NULL);
 }
 
-void ucUnlist_All_Events(uint32_t id)
+void unlist_allEvents(uint32_t id)
 {
     UcEventSet *evset = &uc_waitfor$evset;
 
@@ -102,7 +102,7 @@ void ucUnlist_All_Events(uint32_t id)
     }
 }
 
-void ucComplete_Event(UcEvent *ev)
+void complete_event(UcEvent *ev)
 {
     __Assert( ev->o.kind == UC_ACTIVATE_BY_SIGNAL ||
               ev->o.kind == UC_CALLBACK_ON_COMPLETE );
@@ -116,7 +116,7 @@ void ucComplete_Event(UcEvent *ev)
     }
 }
 
-UcEvent *ucWaitFor_Event()
+UcEvent *wait_forEvent()
 {
     UcEventSet *evset = &uc_waitfor$evset;
 
@@ -131,7 +131,7 @@ UcEvent *ucWaitFor_Event()
 
             __Critical
             {
-                if ( !isNIL(evset->timedEvents) && evset->timedEvents->t.onTick <= onTick )
+                if ( !is_NIL(evset->timedEvents) && evset->timedEvents->t.onTick <= onTick )
                 {
                     ev = evset->timedEvents;
                     evset->timedEvents = ev->next;
@@ -161,14 +161,14 @@ UcEvent *ucWaitFor_Event()
             if ( onTick > 0x7fffffff )
             {
                 tick -= onTick;
-                for( ev = evset->timedEvents ; !isNIL(ev); ev = ev->next )
+                for( ev = evset->timedEvents ; !is_NIL(ev); ev = ev->next )
                     ev->t.onTick -= onTick;
             }
 
             ev = evset->otherEvents;
         }
 
-        while ( !isNIL(ev) )
+        while ( !is_NIL(ev) )
         {
             bool triggered = false;
             switch (ev->o.kind)
@@ -195,7 +195,7 @@ UcEvent *ucWaitFor_Event()
             if (triggered)
             {
                 if ( !ev->o.repeat )
-                    ucUnlist_Event(ev);
+                    unlist_event(ev);
 
                 if ( ev->callback && ev->o.kind != UC_CALLBACK_ON_COMPLETE )
                     ev->callback(ev);
