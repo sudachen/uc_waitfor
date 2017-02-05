@@ -38,7 +38,7 @@ static void reload(UcEventSet *evset,UcEvent* ev)
     __Assert( ev->o.kind == UC_ACTIVATE_BY_TIMER );
     __Assert( ev->next == NULL );
 
-    ev->t.onTick = tick + ev->o.delay;
+    ev->t.onTick = tick + APP_TIMER_TICKS(ev->o.delay, APP_TIMER_PRESCALER);
 
     __Critical
     {
@@ -66,6 +66,8 @@ void ucList_Event(UcEvent *ev)
             C_SLIST_LINK_BACK(UcEvent,evset->otherEvents,ev,NIL);
         }
     }
+
+    __Assert( ev->next != NULL );
 }
 
 void ucUnlist_Event(UcEvent *ev)
@@ -82,6 +84,22 @@ void ucUnlist_Event(UcEvent *ev)
     }
 
     __Assert(ev->next == NULL);
+}
+
+void ucUnlist_All_Events(uint32_t id)
+{
+    UcEventSet *evset = &uc_waitfor$evset;
+
+    __Critical
+    {
+        UcEvent** const l0 = &evset->timedEvents;
+        C_SLIST_UNLINK_WHEN((_->o.id == id),UcEvent,(*l0),NIL);
+        if ( id != UC_EVENT_ID_TIMER && id != UC_EVENT_ID_NRFTIMER )
+        {
+            UcEvent** const l1 = &evset->otherEvents;
+            C_SLIST_UNLINK_WHEN((_->o.id == id),UcEvent,(*l1),NIL);
+        }
+    }
 }
 
 void ucComplete_Event(UcEvent *ev)

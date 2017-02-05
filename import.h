@@ -21,6 +21,7 @@ enum
 #define UC_EVENT_ID_FIRST  3
 
 #pragma uccm file(uccm_dynamic_defs.h) ~= #define UC_EVENT_ID_TIMER ({#UC_EVENT_ID:1} + UC_EVENT_ID_FIRST)\n
+#pragma uccm file(uccm_dynamic_defs.h) ~= #define UC_EVENT_ID_NRFTIMER ({#UC_EVENT_ID:1} + UC_EVENT_ID_FIRST)\n
 
 typedef struct UcEvent UcEvent;
 typedef struct UcEventSet UcEventSet;
@@ -37,6 +38,8 @@ union uc_waitfor$EventTrig
         bool        completed;
     } is;
 };
+
+#define UC_MAX_TIMER_DELAY (1u<<22)
 
 struct uc_waitfor$EventOpt
 {
@@ -65,6 +68,7 @@ extern const UcEvent uc_waitfor$Nil;
 
 void ucList_Event(struct UcEvent *);
 void ucUnlist_Event(struct UcEvent *);
+void ucUnlist_All_Events(uint32_t id);
 void ucSignal_Event(struct UcEvent *);
 void ucComplete_Event(struct UcEvent *);
 UcEvent * ucWaitFor_Event(void);
@@ -75,4 +79,4 @@ bool ucIsUnlisted_Event(struct UcEvent *e)
     return e->next == NULL;
 }
 
-#define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=0}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
+#define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
