@@ -4,6 +4,12 @@
 #define is_NIL(Ev) (Ev == UC_EVENT_LIST_NIL)
 #define NIL UC_EVENT_LIST_NIL
 
+#ifdef __stm32Fx_UC__
+#define TIMER_TICKS(MS) (MS) // sysTimer configured on 1ms itick interwal
+#elif defined __nRF5x_UC__
+#define TIMER_TICKS(MS) APP_TIMER_TICKS((MS), APP_TIMER_PRESCALER)
+#endif
+
 static uint32_t tick = 0;
 const UcEvent uc_waitfor$Nil = {NULL,NULL,};
 static UcEventSet uc_waitfor$evset = {NIL,NIL};
@@ -38,7 +44,7 @@ static void reload(UcEventSet *evset,UcEvent* ev)
     __Assert( ev->o.kind == UC_ACTIVATE_BY_TIMER );
     __Assert( ev->next == NULL );
 
-    ev->t.onTick = tick + APP_TIMER_TICKS(ev->o.delay, APP_TIMER_PRESCALER);
+    ev->t.onTick = tick + TIMER_TICKS(ev->o.delay);
 
     __Critical
     {

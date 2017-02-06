@@ -71,7 +71,7 @@ void unlist_event(struct UcEvent *);
 void unlist_allEvents(uint32_t id);
 void signal_event(struct UcEvent *);
 void complete_event(struct UcEvent *);
-UcEvent * wait_forEvent(void);
+UcEvent *wait_forEvent(void);
 
 __Forceinline
 bool is_unlistedEvent(struct UcEvent *e)
@@ -86,3 +86,4 @@ bool is_listedEvent(struct UcEvent *e)
 }
 
 #define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
+#define UC_RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
