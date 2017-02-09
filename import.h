@@ -11,35 +11,35 @@
 
 enum
 {
-    UC_ACTIVATE_BY_TIMER    = 0,
-    UC_ACTIVATE_BY_PROBE    = 1,
-    UC_ACTIVATE_BY_SIGNAL   = 2,
-    UC_CALLBACK_ON_COMPLETE = 3,
+    ACTIVATE_BY_TIMER    = 0,
+    ACTIVATE_BY_PROBE    = 1,
+    ACTIVATE_BY_SIGNAL   = 2,
+    CALLBACK_ON_COMPLETE = 3,
 };
 
-#define UC_EVENT_ID_NONE   0
-#define UC_EVENT_ID_FIRST  3
+#define EVENT_ID_NONE   0
+#define EVENT_ID_FIRST  3
 
-#pragma uccm file(uccm_dynamic_defs.h) ~= #define UC_EVENT_ID_TIMER ({#UC_EVENT_ID:1} + UC_EVENT_ID_FIRST)\n
-#pragma uccm file(uccm_dynamic_defs.h) ~= #define UC_EVENT_ID_NRFTIMER ({#UC_EVENT_ID:1} + UC_EVENT_ID_FIRST)\n
+#pragma uccm file(uccm_dynamic_defs.h) ~= #define EVENT_ID_TIMER ({#EVENT_ID:1} + EVENT_ID_FIRST)\n
+#pragma uccm file(uccm_dynamic_defs.h) ~= #define EVENT_ID_NRFTIMER ({#EVENT_ID:1} + EVENT_ID_FIRST)\n
 
-typedef struct UcEvent UcEvent;
-typedef struct UcEventSet UcEventSet;
-typedef void (*UcEventCallback)(UcEvent *ev);
-typedef bool (*UcEventProbe)(UcEvent *ev);
+typedef struct Event Event;
+typedef struct EventSet EventSet;
+typedef void (*EventCallback)(Event *ev);
+typedef bool (*EventProbe)(Event *ev);
 
 union uc_waitfor$EventTrig
 {
-    UcEventProbe    probe;
-    uint32_t        onTick;
+    EventProbe  probe;
+    uint32_t    onTick;
     struct
     {
-        bool        signalled;
-        bool        completed;
+        bool    signalled;
+        bool    completed;
     } is;
 };
 
-#define UC_MAX_TIMER_DELAY (1u<<22)
+#define MAX_TIMER_DELAY (1u<<22)
 
 struct uc_waitfor$EventOpt
 {
@@ -49,41 +49,41 @@ struct uc_waitfor$EventOpt
    uint32_t delay: 22;
 };
 
-struct UcEvent
+struct Event
 {
-    UcEvent *next;
-    UcEventCallback callback;
+    Event *next;
+    EventCallback callback;
     union uc_waitfor$EventTrig t;
     struct uc_waitfor$EventOpt o;
 };
 
-struct UcEventSet
+struct EventSet
 {
-    UcEvent *timedEvents;
-    UcEvent *otherEvents;
+    Event *timedEvents;
+    Event *otherEvents;
 };
 
-extern const UcEvent uc_waitfor$Nil;
-#define UC_EVENT_LIST_NIL ((UcEvent*)&uc_waitfor$Nil)
+extern const Event uc_waitfor$Nil;
+#define EVENT_LIST_NIL ((Event*)&uc_waitfor$Nil)
 
-void list_event(struct UcEvent *);
-void unlist_event(struct UcEvent *);
+void list_event(struct Event *);
+void unlist_event(struct Event *);
 void unlist_allEvents(uint32_t id);
-void signal_event(struct UcEvent *);
-void complete_event(struct UcEvent *);
-UcEvent *wait_forEvent(void);
+void signal_event(struct Event *);
+void complete_event(struct Event *);
+Event *wait_forEvent(void);
 
 __Forceinline
-bool is_unlistedEvent(struct UcEvent *e)
+bool is_unlistedEvent(struct Event *e)
 {
     return e->next == NULL;
 }
 
 __Forceinline
-bool is_listedEvent(struct UcEvent *e)
+bool is_listedEvent(struct Event *e)
 {
     return e->next != NULL;
 }
 
-#define UC_RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
-#define UC_RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {.onTick=UC_EVENT_ID_TIMER}, {.id = 0, .kind = UC_ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
+#define RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=EVENT_ID_TIMER}, {.id = 0, .kind = ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
+#define RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {.onTick=EVENT_ID_TIMER}, {.id = 0, .kind = ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }

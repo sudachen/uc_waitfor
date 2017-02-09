@@ -5,14 +5,14 @@
 typedef struct NrfTimerEvent NrfTimerEvent;
 struct NrfTimerEvent
 {
-    UcEvent e;
+    Event e;
     app_timer_timeout_handler_t callback;
     void *context;
 };
 
 __Static_Assert( sizeof(NrfTimerEvent) <= sizeof(app_timer_t) );
 
-void uc_waitfor$nrfTimerCallback(UcEvent *e)
+void uc_waitfor$nrfTimerCallback(Event *e)
 {
     NrfTimerEvent *ne = (NrfTimerEvent*)e;
     ne->callback(ne->context);
@@ -32,8 +32,8 @@ uint32_t app_timer_create(
     memset(ne,0,sizeof(*ne));
 
     ne->e.next = NULL;
-    ne->e.o.id = UC_EVENT_ID_NRFTIMER;
-    ne->e.o.kind = UC_ACTIVATE_BY_TIMER;
+    ne->e.o.id = EVENT_ID_NRFTIMER;
+    ne->e.o.kind = ACTIVATE_BY_TIMER;
     ne->e.o.repeat = (mode == APP_TIMER_MODE_REPEATED)?1:0;
     ne->e.callback = uc_waitfor$nrfTimerCallback;
     ne->callback = timeout_handler;
@@ -58,14 +58,14 @@ uint32_t app_timer_start(
     ms = ((uint32_t)ROUNDED_DIV(timeout_ticks * 1000 * (APP_TIMER_PRESCALER + 1),
                                (uint32_t)APP_TIMER_CLOCK_FREQ));
 
-    if ( ms >= UC_MAX_TIMER_DELAY )
+    if ( ms >= MAX_TIMER_DELAY )
     {
         return NRF_ERROR_INVALID_PARAM;
     }
 
     if (is_listedEvent(&ne->e)) unlist_event(&ne->e);
 
-    __Assert(ne->e.o.id == UC_EVENT_ID_NRFTIMER);
+    __Assert(ne->e.o.id == EVENT_ID_NRFTIMER);
     ne->context = p_context;
     ne->e.o.delay = ms;
     list_event(&ne->e);
@@ -83,6 +83,6 @@ uint32_t app_timer_stop(app_timer_id_t timer_id)
 
 uint32_t app_timer_stop_all(void)
 {
-    unlist_allEvents(UC_EVENT_ID_NRFTIMER);
+    unlist_allEvents(EVENT_ID_NRFTIMER);
     return NRF_SUCCESS;
 }
