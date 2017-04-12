@@ -23,6 +23,8 @@ enum
 #pragma uccm file(uccm_dynamic_defs.h) ~= #define EVENT_ID_TIMER ({#EVENT_ID:1} + EVENT_ID_FIRST)\n
 #pragma uccm file(uccm_dynamic_defs.h) ~= #define EVENT_ID_NRFTIMER ({#EVENT_ID:1} + EVENT_ID_FIRST)\n
 
+#define EVENT_IS_BY_TIMER(E) ((E)->o.id == EVENT_ID_TIMER)
+
 typedef struct Event Event;
 typedef struct EventSet EventSet;
 typedef void (*EventCallback)(Event *ev);
@@ -85,5 +87,5 @@ bool is_listedEvent(struct Event *e)
     return e->next != NULL;
 }
 
-#define RTC_REPEAT_EVENT(Delay) { NULL, NULL, {.onTick=EVENT_ID_TIMER}, {.id = 0, .kind = ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
-#define RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {.onTick=EVENT_ID_TIMER}, {.id = 0, .kind = ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
+#define RTC_REPEAT_EVENT(Delay) { NULL, NULL, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
+#define RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
