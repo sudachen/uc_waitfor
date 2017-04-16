@@ -10,6 +10,13 @@
 #define TIMER_TICKS(MS) APP_TIMER_TICKS((MS), APP_TIMER_PRESCALER)
 #endif
 
+typedef struct EventSet EventSet;
+struct EventSet
+{
+    Event *timedEvents;
+    Event *otherEvents;
+};
+
 static uint32_t tick = 0;
 const Event uc_waitfor$Nil = {NULL,NULL,};
 static EventSet uc_waitfor$evset = {NIL,NIL};
@@ -39,37 +46,30 @@ void enable_handleTimedIqr(bool enable)
     }
 }
 
-static void reload(EventSet *evset,Event* ev)
+void list_event(Event *ev)
 {
-    __Assert( ev->o.kind == ACTIVATE_BY_TIMER );
-    __Assert( ev->next == NULL );
+    __Assert( ev != NULL );
+    __Assert( ev != EVENT_LIST_NIL );
 
-    ev->t.onTick = tick + TIMER_TICKS(ev->o.delay);
+    EventSet *evset = &uc_waitfor$evset;
+    enable_handleTimedIqr(true);
 
     __Critical
     {
-        C_SLIST_LINK_WHEN((_->t.onTick > ev->t.onTick),Event,evset->timedEvents,ev,NIL);
-    }
-}
-
-void list_event(Event *ev)
-{
-    EventSet *evset = &uc_waitfor$evset;
-
-    __Assert( ev->next == NULL );
-    if ( ev->next != NULL ) return;
-
-    enable_handleTimedIqr(true);
-
-    if ( ev->o.kind == ACTIVATE_BY_TIMER )
-    {
-        reload(evset,ev);
-    }
-    else
-    {
-        __Critical
+        if ( ev->next == NULL ) // unlisted event
         {
-            C_SLIST_LINK_BACK(Event,evset->otherEvents,ev,NIL);
+            if ( ev->o.kind == ACTIVATE_BY_TIMER )
+            {
+                __Assert( ev->o.kind == ACTIVATE_BY_TIMER );
+                __Assert( ev->next == NULL );
+
+                ev->t.onTick = tick + TIMER_TICKS(ev->o.delay);
+                C_SLIST_LINK_WHEN((_->t.onTick > ev->t.onTick),Event,evset->timedEvents,ev,NIL);
+            }
+            else
+            {
+                C_SLIST_LINK_BACK(Event,evset->otherEvents,ev,NIL);
+            }
         }
     }
 
@@ -78,15 +78,18 @@ void list_event(Event *ev)
 
 void unlist_event(Event *ev)
 {
-    EventSet *evset = &uc_waitfor$evset;
+    __Assert( ev != NULL );
+    __Assert( ev != EVENT_LIST_NIL );
 
-    __Assert(ev->next != NULL);
-    if ( ev->next == NULL ) return;
+    EventSet *evset = &uc_waitfor$evset;
 
     __Critical
     {
-        Event** const l = (ev->o.kind == ACTIVATE_BY_TIMER)?&evset->timedEvents:&evset->otherEvents;
-        C_SLIST_UNLINK(Event,(*l),ev,NIL);
+        if ( ev->next != NULL )
+        {
+            Event** const l = (ev->o.kind == ACTIVATE_BY_TIMER)?&evset->timedEvents:&evset->otherEvents;
+            C_SLIST_UNLINK(Event,(*l),ev,NIL);
+        }
     }
 
     __Assert(ev->next == NULL);
@@ -108,17 +111,32 @@ void unlist_allEvents(uint32_t id)
     }
 }
 
-void complete_event(Event *ev)
+void signal_event(Event *ev)
 {
+    __Assert( is_listedEvent(ev) );
     __Assert( ev->o.kind == ACTIVATE_BY_SIGNAL ||
               ev->o.kind == CALLBACK_ON_COMPLETE );
+    ev->t.is.signalled = true;
+}
 
-    if ( ev->o.kind == ACTIVATE_BY_SIGNAL )
-        ev->t.is.completed = true;
-    else if ( ev->o.kind == CALLBACK_ON_COMPLETE )
+void complete_event(Event *ev)
+{
+    __Assert( ev != NULL );
+
+    switch(ev->o.kind)
     {
-        ev->t.is.completed = true;
-        if ( ev->callback ) ev->callback(ev);
+        case ACTIVATE_BY_SIGNAL:
+            ev->t.is.completed = true;
+            break;
+        case CALLBACK_ON_COMPLETE:
+            if ( !ev->t.is.completed )
+            {
+                ev->t.is.completed = true;
+                if ( ev->callback ) ev->callback(ev);
+            }
+            break;
+        default:
+            ;
     }
 }
 
@@ -129,7 +147,7 @@ Event *wait_forEvent()
     for(;;)
     {
         uint32_t onTick = tick;
-        Event *ev;
+        Event *ev, *tev;
 
         for(;;)
         {
@@ -150,7 +168,7 @@ Event *wait_forEvent()
             ev->next = NULL; // is unlinked
 
             if ( ev->o.repeat )
-                reload(evset,ev); // insert to wating list in appropriate possition
+                list_event(ev); // insert to wating list in appropriate possition
             // new event with the same tick trigger will added the last
             if ( ev->callback )
             {
@@ -198,20 +216,21 @@ Event *wait_forEvent()
                     __Unreachable();
             }
 
-            if (triggered)
-            {
-                if ( !ev->o.repeat )
-                    unlist_event(ev);
-
-                if ( ev->callback && ev->o.kind != CALLBACK_ON_COMPLETE )
-                    ev->callback(ev);
-                else
-                    return ev;
-            }
-
             __Critical
             {
+                tev = ev;
                 ev = ev->next;
+            }
+
+            if (triggered)
+            {
+                if ( !tev->o.repeat )
+                    unlist_event(tev);
+
+                if ( tev->callback && tev->o.kind != CALLBACK_ON_COMPLETE )
+                    tev->callback(tev);
+                else
+                    return tev;
             }
         }
 

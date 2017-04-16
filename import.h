@@ -26,7 +26,6 @@ enum
 #define EVENT_IS_BY_TIMER(E) ((E)->o.id == EVENT_ID_TIMER)
 
 typedef struct Event Event;
-typedef struct EventSet EventSet;
 typedef void (*EventCallback)(Event *ev);
 typedef bool (*EventProbe)(Event *ev);
 
@@ -59,12 +58,6 @@ struct Event
     struct uc_waitfor$EventOpt o;
 };
 
-struct EventSet
-{
-    Event *timedEvents;
-    Event *otherEvents;
-};
-
 extern const Event uc_waitfor$Nil;
 #define EVENT_LIST_NIL ((Event*)&uc_waitfor$Nil)
 
@@ -78,12 +71,14 @@ Event *wait_forEvent(void);
 __Forceinline
 bool is_unlistedEvent(struct Event *e)
 {
+    __Assert(e != NULL);
     return e->next == NULL;
 }
 
 __Forceinline
 bool is_listedEvent(struct Event *e)
 {
+    __Assert(e != NULL);
     return e->next != NULL;
 }
 
