@@ -113,15 +113,23 @@ void unlist_allEvents(uint32_t id)
 
 void signal_event(Event *ev)
 {
-    __Assert( is_listedEvent(ev) );
+    __Assert( ev != NULL );
+    __Assert( ev != EVENT_LIST_NIL );
     __Assert( ev->o.kind == ACTIVATE_BY_SIGNAL ||
               ev->o.kind == CALLBACK_ON_COMPLETE );
-    ev->t.is.signalled = true;
+
+    if ( ev->o.kind == ACTIVATE_BY_SIGNAL ||
+         ev->o.kind == CALLBACK_ON_COMPLETE )
+    {
+        list_event(ev);
+        ev->t.is.signalled = true;
+    }
 }
 
 void complete_event(Event *ev)
 {
     __Assert( ev != NULL );
+    __Assert( ev != EVENT_LIST_NIL );
 
     switch(ev->o.kind)
     {
