@@ -2,6 +2,8 @@
 #include <~sudachen/uc_waitfor/import.h>
 #include <app_timer.h>
 
+#define INFO(...) PRINT("uc_nrf_timer:" __VA_ARGS__)
+
 typedef struct NrfTimerEvent NrfTimerEvent;
 struct NrfTimerEvent
 {
@@ -15,6 +17,7 @@ __Static_Assert( sizeof(NrfTimerEvent) <= sizeof(app_timer_t) );
 void uc_waitfor$nrfTimerCallback(Event *e)
 {
     NrfTimerEvent *ne = (NrfTimerEvent*)e;
+    INFO("callback for %? will triggered now",$p(ne));
     ne->callback(ne->context);
 }
 
@@ -63,12 +66,14 @@ uint32_t app_timer_start(
         return NRF_ERROR_INVALID_PARAM;
     }
 
-    if (is_listedEvent(&ne->e)) unlist_event(&ne->e);
+    unlist_event(&ne->e);
 
     __Assert(ne->e.o.id == EVENT_ID_NRFTIMER);
     ne->context = p_context;
     ne->e.o.delay = ms;
     list_event(&ne->e);
+
+    INFO("timer %? started, for %? ms",$p(timer_id),$u(ms));
 
     return NRF_SUCCESS;
 }
@@ -76,13 +81,16 @@ uint32_t app_timer_start(
 uint32_t app_timer_stop(app_timer_id_t timer_id)
 {
     NrfTimerEvent *ne = (NrfTimerEvent*)timer_id; // yep, it's really is not const!
-    if (is_listedEvent(&ne->e))
-        unlist_event(&ne->e);
+    unlist_event(&ne->e);
+
+    INFO("timer %? stopped",$p(timer_id));
+
     return NRF_SUCCESS;
 }
 
 uint32_t app_timer_stop_all(void)
 {
     unlist_allEvents(EVENT_ID_NRFTIMER);
+    INFO("all timers stopped");
     return NRF_SUCCESS;
 }

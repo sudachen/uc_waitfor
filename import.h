@@ -82,5 +82,17 @@ bool is_listedEvent(struct Event *e)
     return e->next != NULL;
 }
 
-#define RTC_REPEAT_EVENT(Delay) { NULL, NULL, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
-#define RTC_ONESHOT_EVENT(Delay) { NULL, NULL, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
+typedef struct RtcEvent RtcEvent;
+struct RtcEvent
+{
+    Event e;
+};
+
+#define RTC_REPEAT_EVENT_w_CALLBACK(Delay,Callback) \
+    { NULL, Callback, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 1, .delay = (Delay)} }
+
+#define RTC_ONESHOT_EVENT_w_CALLBACK(Delay,Callback) \
+    { NULL, Callback, {0}, {.id = EVENT_ID_TIMER, .kind = ACTIVATE_BY_TIMER, .repeat = 0, .delay = (Delay)} }
+
+#define RTC_REPEAT_EVENT(Delay) RTC_REPEAT_EVENT_w_CALLBACK(Delay,NULL);
+#define RTC_ONESHOT_EVENT(Delay) RTC_ONESHOT_EVENT_w_CALLBACK(Delay,NULL);
