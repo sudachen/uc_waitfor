@@ -17,14 +17,14 @@ struct EventSet
     Event *otherEvents;
 };
 
-static uint32_t tick = 0;
+static uint32_t uc_waitfor$Tick = 0;
 const Event uc_waitfor$Nil = {NULL,NULL,};
-static EventSet uc_waitfor$evset = {NIL,NIL};
+static EventSet uc_waitfor$EvSet = {NIL,NIL};
 
 static void on_timedIrqHandler(IrqHandler* self)
 {
     (void)self;
-    ++tick;
+    ++uc_waitfor$Tick;
 }
 
 void enable_handleTimedIqr(bool enable)
@@ -41,7 +41,7 @@ void enable_handleTimedIqr(bool enable)
         if ( h.next != NULL )
         {
             unregister_1msHandler(&h);
-            tick = 0;
+            uc_waitfor$Tick = 0;
         }
     }
 }
@@ -51,7 +51,7 @@ void list_event(Event *ev)
     __Assert( ev != NULL );
     __Assert( ev != EVENT_LIST_NIL );
 
-    EventSet *evset = &uc_waitfor$evset;
+    EventSet *evset = &uc_waitfor$EvSet;
     enable_handleTimedIqr(true);
 
     __Critical
@@ -63,7 +63,7 @@ void list_event(Event *ev)
                 __Assert( ev->o.kind == ACTIVATE_BY_TIMER );
                 __Assert( ev->next == NULL );
 
-                ev->t.onTick = tick + TIMER_TICKS(ev->o.delay);
+                ev->t.onTick = uc_waitfor$Tick + TIMER_TICKS(ev->o.delay);
                 C_SLIST_LINK_WHEN((_->t.onTick > ev->t.onTick),Event,evset->timedEvents,ev,NIL);
             }
             else
@@ -81,7 +81,7 @@ void unlist_event(Event *ev)
     __Assert( ev != NULL );
     __Assert( ev != EVENT_LIST_NIL );
 
-    EventSet *evset = &uc_waitfor$evset;
+    EventSet *evset = &uc_waitfor$EvSet;
 
     __Critical
     {
@@ -97,7 +97,7 @@ void unlist_event(Event *ev)
 
 void unlist_allEvents(uint32_t id)
 {
-    EventSet *evset = &uc_waitfor$evset;
+    EventSet *evset = &uc_waitfor$EvSet;
 
     __Critical
     {
@@ -150,11 +150,11 @@ void complete_event(Event *ev)
 
 Event *wait_forEvent()
 {
-    EventSet *evset = &uc_waitfor$evset;
+    EventSet *evset = &uc_waitfor$EvSet;
 
     for(;;)
     {
-        uint32_t onTick = tick;
+        uint32_t onTick = uc_waitfor$Tick;
         Event *ev, *tev;
 
         for(;;)
@@ -177,7 +177,7 @@ Event *wait_forEvent()
 
             if ( ev->o.repeat )
                 list_event(ev); // insert to wating list in appropriate possition
-            // new event with the same tick trigger will added the last
+            // new event with the same uc_waitfor$Tick trigger will added the last
             if ( ev->callback )
             {
                 ev->callback(ev);
@@ -192,7 +192,7 @@ Event *wait_forEvent()
         {
             if ( onTick > 0x7fffffff )
             {
-                tick -= onTick;
+                uc_waitfor$Tick -= onTick;
                 for( ev = evset->timedEvents ; !is_NIL(ev); ev = ev->next )
                     ev->t.onTick -= onTick;
             }
