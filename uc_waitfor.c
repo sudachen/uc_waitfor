@@ -3,6 +3,7 @@
 
 #define is_NIL(Ev) (Ev == EVENT_LIST_NIL)
 #define NIL EVENT_LIST_NIL
+#define CR_NIL CR_LIST_NIL
 
 #ifdef __stm32Fx_UC__
 #define TIMER_TICKS(MS) (MS) // sysTimer configured on 1ms itick interwal
@@ -18,8 +19,11 @@ struct EventSet
 };
 
 static uint32_t uc_waitfor$Tick = 0;
-const Event uc_waitfor$Nil = {NULL,NULL,};
+const void *uc_waitfor$Nil = NULL;
+const void *uc_waitfor$CrNil = NULL;
 static EventSet uc_waitfor$EvSet = {NIL,NIL};
+static CrContext *uc_waitfor$CrList = CR_NIL;
+static uint8_t YieldedCrsCount = 0;
 
 static void on_timedIrqHandler(IrqHandler* self)
 {
@@ -126,10 +130,171 @@ void signal_event(Event *ev)
     }
 }
 
+static void resume_crsOnEvent(Event *ev)
+{
+    CrContext *pcr, *cr, **ecr;
+    pcr = uc_waitfor$CrList;
+    uc_waitfor$CrList = CR_NIL;
+    ecr = &uc_waitfor$CrList;
+    while ( pcr != CR_NIL )
+    {
+        cr = pcr;
+        pcr = cr->next;
+        if ( cr->event != ev )
+        {
+            *ecr = cr;
+            cr->next = CR_NIL;
+            ecr = &cr->next;
+        }
+        else
+        {
+            cr->next = NULL;
+            cr->event = NULL;
+            unlist_event(&cr->e);
+            cr->route(cr);
+        }
+    }
+}
+
+static void resume_yieldedCrs()
+{
+    CrContext *pcr, *cr, **ecr;
+    pcr = uc_waitfor$CrList;
+    uc_waitfor$CrList = CR_NIL;
+    ecr = &uc_waitfor$CrList;
+    while ( pcr != CR_NIL )
+    {
+        cr = pcr;
+        pcr = cr->next;
+        if ( cr->event != NIL )
+        {
+            *ecr = cr;
+            cr->next = CR_NIL;
+            ecr = &cr->next;
+        }
+        else
+        {
+            __Assert( YieldedCrsCount > 0 );
+            --YieldedCrsCount;
+            cr->event = NULL;
+            cr->next = NULL;
+            cr->route(cr);
+        }
+    }
+}
+
+void resume_cr(CrContext *cr)
+{
+    __Assert( cr->route != NULL );
+
+    if ( cr->next != NULL )
+    {
+        CrContext **ecr = &uc_waitfor$CrList;
+        while ( *ecr != CR_NIL )
+        {
+            if ( *ecr == cr )
+            {
+                *ecr = cr->next;
+                cr->next = NULL;
+                if ( cr->event == NIL )
+                {
+                    __Assert( YieldedCrsCount > 0 );
+                    --YieldedCrsCount;
+                }
+                else
+                    unlist_event(&cr->e);
+                cr->event = NULL;
+                cr->route(cr);
+                return;
+            }
+        }
+
+        __Assert_S( 0,"sheduled coroutine is not in cr_list" );
+    }
+    else
+       cr->route(cr);
+}
+
+static void resume_crBy(Event *e)
+{
+    CrContext *cr = C_BASE_OF(CrContext,e,e);
+
+    __Assert( cr->route != NULL );
+    __Assert( cr->next != NULL );
+
+    resume_cr(cr);
+}
+
+void call_cr(CrContext *cr)
+{
+    __Assert(cr != NULL);
+    __Assert(cr->route != NULL);
+    __Assert(cr->next == NULL);
+    __Assert(!cr->crPtr);
+    resume_cr(cr);
+}
+
+void suspend_cr(CrContext *cr, CrPtr ptr)
+{
+    __Assert( cr!=NULL );
+    __Assert( cr->route != NULL );
+    __Assert( cr->next == NULL );
+    __Assert( !!ptr );
+
+    cr->crPtr = ptr;
+    cr->event = NULL;
+    C_SLIST_LINK_BACK(CrContext,uc_waitfor$CrList,cr,CR_NIL);
+}
+
+void yield_cr(CrContext *cr, CrPtr ptr)
+{
+    suspend_cr(cr,ptr);
+    __Assert( cr->event == NULL );
+    __Assert( cr->e.next == NULL );
+    ++YieldedCrsCount;
+    cr->event = NIL;
+}
+
+void wait_crMs(uint32_t ms, CrContext *cr, CrPtr ptr)
+{
+    suspend_cr(cr,ptr);
+    __Assert( cr->event == NULL );
+    memset(&cr->e,0,sizeof(cr->e));
+    cr->e.callback = resume_crBy;
+    cr->e.o.delay = ms;
+    cr->e.o.id = EVENT_ID_TIMER;
+    cr->e.o.kind = ACTIVATE_BY_TIMER;
+    list_event(&cr->e);
+}
+
+void wait_crEvent(Event *e, uint32_t ms, CrContext *cr, CrPtr ptr)
+{
+    __Assert( e != NULL );
+    __Assert( e != NIL );
+
+    if ( ms )
+        wait_crMs(ms,cr,ptr);
+    else
+        suspend_cr(cr,ptr);
+
+    cr->event = e;
+}
+
+Event *arm_cr(CrContext *cr)
+{
+    memset(&cr->e,0,sizeof(cr->e));
+    cr->e.callback = resume_crBy;
+    cr->e.o.id = EVENT_ID_CR;
+    cr->e.o.kind = ACTIVATE_BY_SIGNAL;
+    return &cr->e;
+}
+
 void complete_event(Event *ev)
 {
     __Assert( ev != NULL );
     __Assert( ev != EVENT_LIST_NIL );
+
+    resume_crsOnEvent(ev);
 
     switch(ev->o.kind)
     {
@@ -221,7 +386,7 @@ Event *wait_forEvent()
                     }
                     break;
                 default:
-                    __Unreachable();
+                    __Unreachable;
             }
 
             __Critical
@@ -241,6 +406,9 @@ Event *wait_forEvent()
                     return tev;
             }
         }
+
+        if ( YieldedCrsCount != 0 )
+            resume_yieldedCrs();
 
         __WFE();
     }
