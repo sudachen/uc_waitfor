@@ -1,5 +1,5 @@
 
-#include <~sudachen/uc_waitfor/import.h>
+#include "import.h"
 #include <app_timer.h>
 
 #define INFO(...) PRINT("uc_nrf_timer:" __VA_ARGS__)
@@ -73,8 +73,6 @@ uint32_t app_timer_start(
     ne->e.o.delay = ms;
     list_event(&ne->e);
 
-    INFO("timer %? started, for %? ms",$p(timer_id),$u(ms));
-
     return NRF_SUCCESS;
 }
 
@@ -83,14 +81,11 @@ uint32_t app_timer_stop(app_timer_id_t timer_id)
     NrfTimerEvent *ne = (NrfTimerEvent*)timer_id; // yep, it's really is not const!
     unlist_event(&ne->e);
 
-    INFO("timer %? stopped",$p(timer_id));
-
     return NRF_SUCCESS;
 }
 
 uint32_t app_timer_stop_all(void)
 {
     unlist_allEvents(EVENT_ID_NRFTIMER);
-    INFO("all timers stopped");
     return NRF_SUCCESS;
 }

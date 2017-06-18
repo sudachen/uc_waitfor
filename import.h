@@ -1,7 +1,7 @@
 
 #pragma once
 #include <uccm/board.h>
-#include <~sudachen/uc_irq/import.h>
+#include <uccm/irq/irq_1ms.h>
 
 #pragma uccm require(source) += [@inc]/~sudachen/uc_waitfor/uc_waitfor.c
 
@@ -24,6 +24,8 @@
 typedef struct Event Event;
 typedef void (*EventCallback)(Event *ev);
 typedef bool (*EventProbe)(Event *ev);
+
+#define EVENT_BY_ID(Id) ((Event*)((Id)&0x0ff))
 
 enum
 {
@@ -64,6 +66,9 @@ struct Event
 
 extern const void* uc_waitfor$Nil;
 #define EVENT_LIST_NIL ((Event*)&uc_waitfor$Nil)
+extern const void* uc_waitfor$GroupTag;
+#define EVENT_GROUP_TAG ((Event*)&uc_waitfor$GroupTag)
+#define EVENT_GROUP(...) {EVENT_GROUP_TAG, __VA_ARGS__, NULL}
 
 void list_event(struct Event *);
 void unlist_event(struct Event *);
@@ -107,9 +112,9 @@ extern const void* uc_waitfor$CrNil;
 #define CR_LIST_NIL ((CrContext*)&uc_waitfor$CrNil)
 
 #ifdef CR_USES_SWITCH_CASE
-#define CR_SWITCH(Cr)      switch(Cr->crPtr) if (0) {;} else case 0:
-#define CR_MSDELAY(Cr,Ms)  wait_crMs(Ms,Cr,__LINE__); return; case __LINE__:
-#define CR_AWAIT(Cr,Ev,Ms) wait_crEvent(Ev,Ms,Cr,__LINE__); return; case __LINE__:
+#define CR_SWITCH(Cr)      switch((Cr)->crPtr) if (0) {;} else case 0:
+#define CR_DELAY(Cr,Ms)    wait_cr(Ms,NULL,Cr,__LINE__); return; case __LINE__:
+#define CR_AWAIT(Cr,Ms,Ev) wait_cr(Ms,Ev,Cr,__LINE__); return; case __LINE__:
 #define CR_YIELD(Cr)       yield_cr(Cr,__LINE__); return; case __LINE__:
 #define CR_SLEEP(Cr)       suspend_cr(Cr,__LINE__); return; case __LINE__:
 #else
@@ -118,14 +123,15 @@ extern const void* uc_waitfor$CrNil;
 #define GOTO_LABEL_PTR(L) goto *L
 #endif
 #define CR_SWITCH(Cr)      if ( (Cr)->crPtr != NULL ) { GOTO_LABEL_PTR((Cr)->crPtr); } else
-#define CR_MSDELAY(Cr,Ms)  wait_crMs(Ms,Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
-#define CR_AWAIT(Cr,Ev,Ms) wait_crEvent(Ev,Ms,Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
+#define CR_DELAY(Cr,Ms)    wait_cr(Ms,NULL,Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
+#define CR_AWAIT(Cr,Ms,Ev) wait_cr(Ms,Ev,Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
 #define CR_YIELD(Cr)       yield_cr(Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
 #define CR_SLEEP(Cr)       suspend_cr(Cr,ADDRESS_OF_LABEL(C_LOCAL_ID(_CR_))); return; C_LOCAL_ID(_CR_):
 #endif
 
-void wait_crMs(uint32_t ms, CrContext *cr, CrPtr ptr);
-void wait_crEvent(Event *e, uint32_t ms, CrContext *cr, CrPtr ptr);
+#define CR_REPEAT(Cr) CR_SWITCH(Cr) for(;;)
+
+void wait_cr(uint32_t ms, Event *e, CrContext *cr, CrPtr ptr);
 void suspend_cr(CrContext *cr, CrPtr ptr);
 void yield_cr(CrContext *cr, CrPtr ptr);
 void resume_cr(CrContext *cr);

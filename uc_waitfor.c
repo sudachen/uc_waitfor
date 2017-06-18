@@ -1,5 +1,5 @@
 
-#include <~sudachen/uc_waitfor/import.h>
+#include "import.h"
 
 #define is_NIL(Ev) (Ev == EVENT_LIST_NIL)
 #define NIL EVENT_LIST_NIL
@@ -21,6 +21,7 @@ struct EventSet
 static uint32_t uc_waitfor$Tick = 0;
 const void *uc_waitfor$Nil = NULL;
 const void *uc_waitfor$CrNil = NULL;
+const void* uc_waitfor$GroupTag = NULL;
 static EventSet uc_waitfor$EvSet = {NIL,NIL};
 static CrContext *uc_waitfor$CrList = CR_NIL;
 static uint8_t YieldedCrsCount = 0;
@@ -130,7 +131,7 @@ void signal_event(Event *ev)
     }
 }
 
-static void resume_crsOnEvent(Event *ev)
+static void resume_crsOnEvent(Event *e)
 {
     CrContext *pcr, *cr, **ecr;
     pcr = uc_waitfor$CrList;
@@ -140,18 +141,28 @@ static void resume_crsOnEvent(Event *ev)
     {
         cr = pcr;
         pcr = cr->next;
-        if ( cr->event != ev )
+        if ( cr->event == e || cr->event == EVENT_BY_ID(e->o.id) )
+        {
+        found:
+            cr->next = NULL;
+            cr->event = e;
+            unlist_event(&cr->e);
+            cr->route(cr);
+        }
+        else if ( cr->event != NULL && cr->event->next == EVENT_GROUP_TAG )
+        {
+            Event **ee = &cr->event->next; // equal to (Event**)cr->event
+            for ( ++ee; *ee != NULL; ++ee )
+            {
+                if ( *ee == e || *ee == EVENT_BY_ID(e->o.id) )
+                    goto found;
+            }
+        }
+        else
         {
             *ecr = cr;
             cr->next = CR_NIL;
             ecr = &cr->next;
-        }
-        else
-        {
-            cr->next = NULL;
-            cr->event = NULL;
-            unlist_event(&cr->e);
-            cr->route(cr);
         }
     }
 }
@@ -212,7 +223,9 @@ void resume_cr(CrContext *cr)
         __Assert_S( 0,"sheduled coroutine is not in cr_list" );
     }
     else
+    {
        cr->route(cr);
+    }
 }
 
 static void resume_crBy(Event *e)
@@ -243,6 +256,8 @@ void suspend_cr(CrContext *cr, CrPtr ptr)
 
     cr->crPtr = ptr;
     cr->event = NULL;
+    cr->e.next = NULL;
+
     C_SLIST_LINK_BACK(CrContext,uc_waitfor$CrList,cr,CR_NIL);
 }
 
@@ -255,37 +270,29 @@ void yield_cr(CrContext *cr, CrPtr ptr)
     cr->event = NIL;
 }
 
-void wait_crMs(uint32_t ms, CrContext *cr, CrPtr ptr)
+void wait_cr(uint32_t ms, Event *e, CrContext *cr, CrPtr ptr)
 {
     suspend_cr(cr,ptr);
-    __Assert( cr->event == NULL );
-    memset(&cr->e,0,sizeof(cr->e));
-    cr->e.callback = resume_crBy;
-    cr->e.o.delay = ms;
-    cr->e.o.id = EVENT_ID_TIMER;
-    cr->e.o.kind = ACTIVATE_BY_TIMER;
-    list_event(&cr->e);
-}
 
-void wait_crEvent(Event *e, uint32_t ms, CrContext *cr, CrPtr ptr)
-{
-    __Assert( e != NULL );
-    __Assert( e != NIL );
-
-    if ( ms )
-        wait_crMs(ms,cr,ptr);
-    else
-        suspend_cr(cr,ptr);
+    if ( ms != 0 )
+    {
+        memset(&cr->e,0,sizeof(cr->e));
+        cr->e.callback = resume_crBy;
+        cr->e.o.delay = ms;
+        cr->e.o.id = EVENT_ID_TIMER;
+        cr->e.o.kind = ACTIVATE_BY_TIMER;
+        list_event(&cr->e);
+    }
 
     cr->event = e;
 }
 
 Event *arm_cr(CrContext *cr)
 {
-    memset(&cr->e,0,sizeof(cr->e));
+    memset(&cr->e,0,sizeof(cr->e));    
     cr->e.callback = resume_crBy;
     cr->e.o.id = EVENT_ID_CR;
-    cr->e.o.kind = ACTIVATE_BY_SIGNAL;
+    cr->e.o.kind = ACTIVATE_BY_SIGNAL;    
     return &cr->e;
 }
 
